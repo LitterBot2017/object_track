@@ -1,4 +1,6 @@
 float32 x
 float32 y
-int32 detections
-bool centered
+float32 x_center
+float32 y_center
+bool detection
+bool down_servo
