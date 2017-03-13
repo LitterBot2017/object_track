@@ -137,6 +137,7 @@ class object_track:
           if self.current_state == self.FORWARD:
             if self.is_centered(self.bbox[0],self.bbox[1]):
               self.current_state = self.SWITCH_CAMERA
+              self.tracker_state = False
               self.timer = time.time()
               #Publish switch camera message
             else:
@@ -146,7 +147,7 @@ class object_track:
               self.current_state = self.FORWARD
               #Publish switch camera message          
             else:
-              self.publish_bbox(self.bbox[0],self.bbox[1],640,680,self.litter_detected,True)
+              self.publish_bbox(self.bbox[0],self.bbox[1],640,400,self.litter_detected,True)
       else:
         self.tracker_state=False
     else:
