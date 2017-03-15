@@ -60,7 +60,7 @@ class object_track:
         if self.tracker_state != True:
           obj = data.detections[0]
           self.litter_detected = True
-          self.bbox = (obj.y,obj.x,30,30)
+          self.bbox = (obj.x,obj.y,30,30)
         else:
           self.litter_detected = True
       elif data.num_detections == 0 and self.tracker_state == False:
@@ -77,7 +77,7 @@ class object_track:
           confidence = objects.confidence
           if class_id < 2 and confidence > 0.3: 
             if self.tracker_state != True:
-              self.bbox = (objects.y,objects.x,30,30)
+              self.bbox = (objects.x,objects.y,30,30)
               self.litter_detected = True
               return
             else:
@@ -102,9 +102,9 @@ class object_track:
       print("hello")
       print(e)
 
-    if self.current_state == self.SWITCH_CAMERA and time.time() - self.timer<3:
+    if self.current_state == self.SWITCH_CAMERA and time.time() - self.timer<10:
       self.publish_bbox(0,0,0,0,False,True)
-    elif self.current_state == self.SWITCH_CAMERA and time.time() - self.timer>3:
+    elif self.current_state == self.SWITCH_CAMERA and time.time() - self.timer>10:
       self.current_state = self.DOWNWARD
     self.image=cv_image
     if self.litter_detected:
@@ -133,11 +133,11 @@ class object_track:
     xdiff = -30000
     ydiff = -20000
     if self.current_state == self.FORWARD:
-      xdiff = x-640
-      ydiff = y-640      
+      xdiff = x-320
+      ydiff = y-400      
     elif self.current_state == self.DOWNWARD:
-      xdiff = x-640
-      ydiff = y-400
+      xdiff = x-320
+      ydiff = y-240
     if (abs(xdiff)<10 and abs(ydiff)<10):
       return True
     else:
@@ -152,7 +152,7 @@ class object_track:
         print("Tracker init")
 
       ok, newbox = self.tracker.update(image_in)
-      if ok:
+      if ok and (abs(self.bbox[0]-newbox[0])<20) and (abs(self.bbox[1]-newbox[1])<20):
           self.bbox = newbox
           if self.current_state == self.FORWARD:
             if self.is_centered(self.bbox[0],self.bbox[1]):
@@ -162,14 +162,14 @@ class object_track:
               self.select_camera(0)
               #Publish switch camera message
             else:
-              self.publish_bbox(self.bbox[0],self.bbox[1],640,640,self.litter_detected,False)
+              self.publish_bbox(self.bbox[0],self.bbox[1],320,400,self.litter_detected,False)
           elif self.current_state == self.DOWNWARD:
             if self.is_centered(self.bbox[0],self.bbox[1]):
               self.current_state = self.FORWARD
               self.select_camera(1)
               #Publish switch camera message          
             else:
-              self.publish_bbox(self.bbox[0],self.bbox[1],640,400,self.litter_detected,True)
+              self.publish_bbox(self.bbox[0],self.bbox[1],320,240,self.litter_detected,True)
       else:
         self.tracker_state=False
 
