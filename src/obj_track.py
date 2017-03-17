@@ -106,6 +106,7 @@ class object_track:
       self.publish_bbox(0,0,0,0,False,True)
     elif self.current_state == self.SWITCH_CAMERA and time.time() - self.timer>10:
       self.current_state = self.DOWNWARD
+
     self.image=cv_image
     if self.litter_detected:
       self.track_object(cv_image)
@@ -138,7 +139,7 @@ class object_track:
     elif self.current_state == self.DOWNWARD:
       xdiff = x-320
       ydiff = y-240
-    if (abs(xdiff)<10 and abs(ydiff)<10):
+    if (abs(xdiff)<50 and abs(ydiff)<50):
       return True
     else:
       return False
