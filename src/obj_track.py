@@ -78,6 +78,7 @@ class object_track:
           if class_id < 2 and confidence > 0.3: 
             if self.tracker_state != True:
               self.bbox = (objects.x,objects.y,30,30)
+              self.bbox2 = (obj.x,obj.y,30,30)
               self.litter_detected = True
               return
             else:
@@ -137,8 +138,8 @@ class object_track:
       xdiff = x-320
       ydiff = y-400      
     elif self.current_state == self.DOWNWARD:
-      xdiff = x-320
-      ydiff = y-240
+      xdiff = x-640
+      ydiff = y-235
     if (abs(xdiff)<50 and abs(ydiff)<50):
       return True
     else:
@@ -170,7 +171,7 @@ class object_track:
               self.select_camera(1)
               #Publish switch camera message          
             else:
-              self.publish_bbox(self.bbox[0],self.bbox[1],320,240,self.litter_detected,True)
+              self.publish_bbox(self.bbox[0],self.bbox[1],640,235,self.litter_detected,True)
       else:
         self.tracker_state=False
 
