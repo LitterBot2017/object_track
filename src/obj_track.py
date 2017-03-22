@@ -21,6 +21,11 @@ class object_track:
   DOWNWARD = 3
   current_state = FORWARD
 
+  DOWNWARD_IMAGE_HEIGHT = 480
+  DOWNWARD_IMAGE_WIDTH = 640
+  FORWARD_IMAGE_HEIGHT = 480
+  FORWARD_IMAGE_WIDTH = 640
+
   bbox = ()
   tracker = cv2.Tracker_create("MIL")
   litter_detected = False
@@ -42,7 +47,7 @@ class object_track:
     msg.data = camera;
     self.camera_select_pub.publish(msg);
 
-  def publish_bbox(self,x,y,x_center,y_center,detection,down_servo):
+  def publish_bbox(self, x, y, x_center, y_center, detection, down_servo):
     bbox_msg = BBox()
     bbox_msg.x = x
     bbox_msg.y = y
@@ -52,44 +57,68 @@ class object_track:
     bbox_msg.down_servo = down_servo
     self.bbox_pub.publish(bbox_msg)
 
-  def detections_callback(self,data):
-    if self.current_state == self.FORWARD:
-      if data.num_detections > 0: 
+  def handle_forward(self,data):
+    if data.num_detections > 0:
+      obj = data.detections[0]
+      self.bbox2 = (obj.x,obj.y,30,30)
+      if self.tracker_state != True:
         obj = data.detections[0]
-        self.bbox2 = (obj.x,obj.y,30,30)
-        if self.tracker_state != True:
-          obj = data.detections[0]
-          self.litter_detected = True
-          self.bbox = (obj.x,obj.y,30,30)
-        else:
-          self.litter_detected = True
-      elif data.num_detections == 0 and self.tracker_state == False:
-        self.litter_detected = False
-    if self.current_state == self.SWITCH_CAMERA:
-      self.litter_detected = False
-      return
-    if self.current_state == self.DOWNWARD:
-      if data.num_detections > 0:
-        class_id = -1
-        confidence = 0
-        for objects in data.detections:
-          class_id = objects.class_id
-          confidence = objects.confidence
-          if class_id < 2 and confidence > 0.3: 
-            if self.tracker_state != True:
-              self.bbox = (objects.x,objects.y,30,30)
-              self.bbox2 = (obj.x,obj.y,30,30)
-              self.litter_detected = True
-              return
-            else:
-              self.litter_detected = True
-              return
-        if self.tracker_state != True:
-          self.litter_detected = False
-          return
+        self.litter_detected = True
+        self.bbox = (obj.x,obj.y,30,30)
       else:
+        self.litter_detected = True
+    elif data.num_detections == 0 and self.tracker_state == False:
+      self.litter_detected = False
+
+  def handle_downward(self,data):
+    print("curent state is down")
+    if data.num_detections > 0:
+      class_id = -1
+      confidence = 0
+      for objects in data.detections:
+        class_id = objects.class_id
+        confidence = objects.confidence
+        print ("there are unconfirmed detections")
+        if class_id < 2 and confidence > 0.3: 
+          if self.tracker_state != True:
+            self.bbox = (objects.x,objects.y,30,30)
+            self.bbox2 = (objects.x,objects.y,30,30)
+            print("Reached downward detection lost tracking")
+            self.litter_detected = True
+            return
+          else:
+            print("Reached downward detection but not lost tracking")
+            self.litter_detected = True
+            return
+      if self.tracker_state != True:
         self.litter_detected = False
         return
+    elif self.tracker_state==False:
+      self.litter_detected = False
+      return
+
+  def handle_switch(self,data):
+    self.litter_detected = False
+    self.bbox=()
+    self.bbox2=()
+    self.tracker_state = False
+    if data.num_detections>0:
+      object_in_switch = data.detections[0]
+      if object_in_switch.class_id<2 and object_in_switch.confidence>0.7:
+        self.current_state = self.DOWNWARD
+        self.bbox=(object_in_switch.x,object_in_switch.y,30,30)
+        self.bbox2=(object_in_switch.x,object_in_switch.y,30,30)
+        self.litter_detected = True
+    return
+
+  def detections_callback(self,data):
+    if self.current_state == self.FORWARD:
+      self.handle_forward(data)
+    elif self.current_state == self.SWITCH_CAMERA:
+      self.handle_switch(data)
+    elif self.current_state == self.DOWNWARD:
+      self.handle_downward(data)
+      
 
   def image_callback(self,data):
     print(self.bbox)
@@ -106,7 +135,7 @@ class object_track:
     if self.current_state == self.SWITCH_CAMERA and time.time() - self.timer<10:
       self.publish_bbox(0,0,0,0,False,True)
     elif self.current_state == self.SWITCH_CAMERA and time.time() - self.timer>10:
-      self.current_state = self.DOWNWARD
+      self.current_state = self.FORWARD
 
     self.image=cv_image
     if self.litter_detected:
@@ -123,6 +152,7 @@ class object_track:
       if self.current_state == self.DOWNWARD:
         self.current_state = self.FORWARD
         self.select_camera(1)
+        self.tracker_state=False
         #Publish camera switching message
     cv2.imshow("Image window", cv_image)
     cv2.waitKey(3)
@@ -131,19 +161,10 @@ class object_track:
     except CvBridgeError as e:
       print(e)
 
-  def is_centered(self,x,y):
-    xdiff = -30000
-    ydiff = -20000
-    if self.current_state == self.FORWARD:
-      xdiff = x-320
-      ydiff = y-400      
-    elif self.current_state == self.DOWNWARD:
-      xdiff = x-640
-      ydiff = y-235
-    if (abs(xdiff)<50 and abs(ydiff)<50):
-      return True
-    else:
-      return False
+  def is_centered(self, x, y, width, height):
+    xdiff = x - (width/2)
+    ydiff = y - (height/2)
+    return (abs(xdiff) < 50 and abs(ydiff) < 50)
 
   def track_object(self,image_in):
     if self.litter_detected:              
@@ -157,7 +178,7 @@ class object_track:
       if ok and (abs(self.bbox[0]-newbox[0])<20) and (abs(self.bbox[1]-newbox[1])<20):
           self.bbox = newbox
           if self.current_state == self.FORWARD:
-            if self.is_centered(self.bbox[0],self.bbox[1]):
+            if self.is_centered(self.bbox[0],self.bbox[1], FORWARD_IMAGE_WIDTH, FORWARD_IMAGE_HEIGHT):
               self.current_state = self.SWITCH_CAMERA
               self.tracker_state = False
               self.timer = time.time()
@@ -166,12 +187,12 @@ class object_track:
             else:
               self.publish_bbox(self.bbox[0],self.bbox[1],320,400,self.litter_detected,False)
           elif self.current_state == self.DOWNWARD:
-            if self.is_centered(self.bbox[0],self.bbox[1]):
+            if self.is_centered(self.bbox[0],self.bbox[1], DOWNWARD_IMAGE_WIDTH, DOWNWARD_IMAGE_HEIGHT):
               self.current_state = self.FORWARD
               self.select_camera(1)
               #Publish switch camera message          
             else:
-              self.publish_bbox(self.bbox[0],self.bbox[1],640,235,self.litter_detected,True)
+              self.publish_bbox(self.bbox[0],self.bbox[1],320,135,self.litter_detected,True)
       else:
         self.tracker_state=False
 
