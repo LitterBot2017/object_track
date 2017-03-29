@@ -102,7 +102,7 @@ class object_track:
     self.bbox=()
     self.bbox2=()
     self.tracker_state = False
-    if data.num_detections>0:
+    if time.time() - self.timer > 1 and data.num_detections>0:
       object_in_switch = data.detections[0]
       if object_in_switch.class_id<2 and object_in_switch.confidence>0.7:
         self.current_state = self.DOWNWARD
@@ -162,8 +162,12 @@ class object_track:
       print(e)
 
   def is_centered(self, x, y, width, height):
-    xdiff = x - (width/2)
-    ydiff = y - (height/2)
+    if self.current_state==self.FORWARD:
+      xdiff = x - (width/2)
+      ydiff = y - 400 
+    elif self.current_state==self.DOWNWARD:
+      xdiff = x - (width/2)
+      ydiff = y - (height/2)
     return (abs(xdiff) < 50 and abs(ydiff) < 50)
 
   def track_object(self,image_in):
@@ -178,7 +182,7 @@ class object_track:
       if ok and (abs(self.bbox[0]-newbox[0])<20) and (abs(self.bbox[1]-newbox[1])<20):
           self.bbox = newbox
           if self.current_state == self.FORWARD:
-            if self.is_centered(self.bbox[0],self.bbox[1], FORWARD_IMAGE_WIDTH, FORWARD_IMAGE_HEIGHT):
+            if self.is_centered(self.bbox[0],self.bbox[1], self.FORWARD_IMAGE_WIDTH, self.FORWARD_IMAGE_HEIGHT):
               self.current_state = self.SWITCH_CAMERA
               self.tracker_state = False
               self.timer = time.time()
@@ -187,9 +191,9 @@ class object_track:
             else:
               self.publish_bbox(self.bbox[0],self.bbox[1],320,400,self.litter_detected,False)
           elif self.current_state == self.DOWNWARD:
-            if self.is_centered(self.bbox[0],self.bbox[1], DOWNWARD_IMAGE_WIDTH, DOWNWARD_IMAGE_HEIGHT):
+            if self.is_centered(self.bbox[0],self.bbox[1], self.DOWNWARD_IMAGE_WIDTH, self.DOWNWARD_IMAGE_HEIGHT):
               self.current_state = self.FORWARD
-              self.select_camera(1)
+              self.select_camera(1) 
               #Publish switch camera message          
             else:
               self.publish_bbox(self.bbox[0],self.bbox[1],320,135,self.litter_detected,True)
