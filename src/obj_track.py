@@ -31,7 +31,7 @@ class object_track:
   litter_detected = False
   down_servo = False
   tracker_state = False
-  timer = 0
+  timer = time.time()
   bbox2 = () # testing only
 
   def __init__(self):
@@ -58,7 +58,8 @@ class object_track:
     self.bbox_pub.publish(bbox_msg)
 
   def handle_forward(self,data):
-    if data.num_detections > 0:
+    #time.time() - self.timer > 1 and
+    if  data.num_detections > 0:
       obj = data.detections[0]
       self.bbox2 = (obj.x,obj.y,30,30)
       if self.tracker_state != True:
@@ -79,10 +80,10 @@ class object_track:
         class_id = objects.class_id
         confidence = objects.confidence
         print ("there are unconfirmed detections")
-        if class_id < 2 and confidence > 0.3: 
+        if class_id < 2 and confidence > 0.3:
+          self.bbox2 = (objects.x,objects.y,30,30) 
           if self.tracker_state != True:
             self.bbox = (objects.x,objects.y,30,30)
-            self.bbox2 = (objects.x,objects.y,30,30)
             print("Reached downward detection lost tracking")
             self.litter_detected = True
             return
@@ -136,6 +137,8 @@ class object_track:
       self.publish_bbox(0,0,0,0,False,True)
     elif self.current_state == self.SWITCH_CAMERA and time.time() - self.timer>10:
       self.current_state = self.FORWARD
+      self.bbox = ()
+      self.bbox2 = ()
 
     self.image=cv_image
     if self.litter_detected:
@@ -152,6 +155,7 @@ class object_track:
       if self.current_state == self.DOWNWARD:
         self.current_state = self.FORWARD
         self.select_camera(1)
+        #self.timer = time.time()
         self.tracker_state=False
         #Publish camera switching message
     cv2.imshow("Image window", cv_image)
@@ -193,7 +197,11 @@ class object_track:
           elif self.current_state == self.DOWNWARD:
             if self.is_centered(self.bbox[0],self.bbox[1], self.DOWNWARD_IMAGE_WIDTH, self.DOWNWARD_IMAGE_HEIGHT):
               self.current_state = self.FORWARD
+              self.bbox = ()
+              self.bbox2 =()
               self.select_camera(1) 
+              #self.timer = time.time()
+              self.tracker_state=False
               #Publish switch camera message          
             else:
               self.publish_bbox(self.bbox[0],self.bbox[1],320,135,self.litter_detected,True)
