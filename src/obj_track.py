@@ -21,7 +21,7 @@ class object_track:
   DOWNWARD = 3
   current_state = FORWARD
 
-  DOWNWARD_IMAGE_HEIGHT = 480
+  DOWNWARD_IMAGE_HEIGHT = 360
   DOWNWARD_IMAGE_WIDTH = 640
   FORWARD_IMAGE_HEIGHT = 480
   FORWARD_IMAGE_WIDTH = 640
@@ -185,10 +185,10 @@ class object_track:
   def is_centered(self, x, y, width, height):
     if self.current_state==self.FORWARD:
       xdiff = x - (width/2)
-      ydiff = y - 400 
+      ydiff = y - (height - 80) 
     elif self.current_state==self.DOWNWARD:
       xdiff = x - (width/2)
-      ydiff = y - (height/2)
+      ydiff = y - (2*height/3)
     return (abs(xdiff) < 50 and abs(ydiff) < 50)
 
   def track_object(self,image_in):
@@ -208,12 +208,12 @@ class object_track:
               self.select_camera(0)
               #Publish switch camera message
             else:
-              self.publish_bbox(self.bbox[0],self.bbox[1],320,400,self.litter_detected,False,False)
+              self.publish_bbox(self.bbox[0],self.bbox[1],(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT - 80),self.litter_detected,False,False)
           elif self.current_state == self.DOWNWARD:            
             if self.is_centered(self.bbox[0],self.bbox[1], self.DOWNWARD_IMAGE_WIDTH, self.DOWNWARD_IMAGE_HEIGHT):
-              self.publish_bbox(self.bbox[0],self.bbox[1],320,240,self.litter_detected,True,True)
+              self.publish_bbox(self.bbox[0],self.bbox[1], (self.DOWNWARD_IMAGE_WIDTH/2),(2*self.DOWNWARD_IMAGE_HEIGHT/3),self.litter_detected,True,True)
             else:
-              self.publish_bbox(self.bbox[0],self.bbox[1],320,240,self.litter_detected,True,False)
+              self.publish_bbox(self.bbox[0],self.bbox[1],(self.DOWNWARD_IMAGE_WIDTH/2),(2*self.DOWNWARD_IMAGE_HEIGHT/3),self.litter_detected,True,False)
               #Publish switch camera message
       else:
         self.tracker_state=False
