@@ -136,7 +136,9 @@ class object_track:
       p1 = (int(self.bbox[0]), int(self.bbox[1]))
       p2 = (int(self.bbox[0] + 30), int(self.bbox[1] + 30))
       p3 = (int(self.bbox2[0]), int(self.bbox2[1]))
-      p4 = (int(self.bbox2[0] + 30), int(self.bbox2[1] + 30))      
+      p4 = (int(self.bbox2[0] + 30), int(self.bbox2[1] + 30))
+      if self.bboxInBounds(self.bbox) ==False or self.bboxInBounds(self.bbox2) == False:
+        return cv_image
       cv2.rectangle(cv_image, p1, p2, (0,0,255),4)
       cv2.rectangle(cv_image, p3, p4, (0,255,0),4)
     return cv_image    
@@ -162,8 +164,6 @@ class object_track:
       self.bbox2 = ()
       self.tracker_state = False
       self.litter_detected = False
-
-    
     if self.litter_detected:
       self.track_object(cv_image)
       cv_image=self.draw_rectangle(cv_image)
@@ -188,17 +188,29 @@ class object_track:
       ydiff = y - (height - 80) 
     elif self.current_state==self.DOWNWARD:
       xdiff = x - (width/2)
-      ydiff = y - (2*height/3)
+      ydiff = y - (3*height/4)
     return (abs(xdiff) < 50 and abs(ydiff) < 50)
 
+  def bboxInBounds(self,bbox):
+    p1 = (int(bbox[0]), int(bbox[1]))
+    p2 = (int(bbox[0] + 30), int(bbox[1] + 30))
+    if p1[0] >= 450 or p1[1] >= 610 or p1[0] <= 30 or p1[1] <= 30:
+      return False
+    if p2[0] >= 450 or p2[1] >= 610 or p2[0] <= 30 or p2[1] <= 30:
+      return False
+    return True
+
   def track_object(self,image_in):
-    if self.bbox!=():      
-      if self.tracker_state!=True:
+    if self.bbox!=():
+      if self.tracker_state!=True and self.bboxInBounds(self.bbox) == True:
         self.tracker = cv2.Tracker_create("MIL")
         ok = self.tracker.init(image_in, self.bbox)
         self.tracker_state = True
-        print("Tracker init")
       ok, newbox = self.tracker.update(image_in)
+      bboxX = self.bbox[0]
+      bboxY = self.bbox[1]
+      newBboxX = newbox[0]
+      newBboxY = newbox[1]
       if ok and (abs(self.bbox[0]-newbox[0])<20) and (abs(self.bbox[1]-newbox[1])<20):
           self.bbox = newbox
           if self.current_state == self.FORWARD:
@@ -211,9 +223,9 @@ class object_track:
               self.publish_bbox(self.bbox[0],self.bbox[1],(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT - 80),self.litter_detected,False,False)
           elif self.current_state == self.DOWNWARD:            
             if self.is_centered(self.bbox[0],self.bbox[1], self.DOWNWARD_IMAGE_WIDTH, self.DOWNWARD_IMAGE_HEIGHT):
-              self.publish_bbox(self.bbox[0],self.bbox[1], (self.DOWNWARD_IMAGE_WIDTH/2),(2*self.DOWNWARD_IMAGE_HEIGHT/3),self.litter_detected,True,True)
+              self.publish_bbox(self.bbox[0],self.bbox[1], (self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,True)
             else:
-              self.publish_bbox(self.bbox[0],self.bbox[1],(self.DOWNWARD_IMAGE_WIDTH/2),(2*self.DOWNWARD_IMAGE_HEIGHT/3),self.litter_detected,True,False)
+              self.publish_bbox(self.bbox[0],self.bbox[1],(self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,False)
               #Publish switch camera message
       else:
         self.tracker_state=False
