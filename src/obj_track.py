@@ -194,9 +194,9 @@ class object_track:
   def bboxInBounds(self,bbox):
     p1 = (int(bbox[0]), int(bbox[1]))
     p2 = (int(bbox[0] + 30), int(bbox[1] + 30))
-    if p1[0] >= 450 or p1[1] >= 610 or p1[0] <= 30 or p1[1] <= 30:
+    if p1[0] >= 610 or p1[1] >= 450 or p1[0] <= 30 or p1[1] <= 30:
       return False
-    if p2[0] >= 450 or p2[1] >= 610 or p2[0] <= 30 or p2[1] <= 30:
+    if p2[0] >= 610 or p2[1] >= 450 or p2[0] <= 30 or p2[1] <= 30:
       return False
     return True
 
