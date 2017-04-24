@@ -21,7 +21,7 @@ class object_track:
   DOWNWARD = 3
   current_state = FORWARD
 
-  DOWNWARD_IMAGE_HEIGHT = 360
+  DOWNWARD_IMAGE_HEIGHT = 360 # 530
   DOWNWARD_IMAGE_WIDTH = 640
   FORWARD_IMAGE_HEIGHT = 480
   FORWARD_IMAGE_WIDTH = 640
@@ -196,9 +196,9 @@ class object_track:
   def bboxInBounds(self,bbox):
     p1 = (int(bbox[0]), int(bbox[1]))
     p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-    if p1[0] >= 640 or p1[1] >= 480 or p1[0] <= 0 or p1[1] <= 0:
+    if p1[0] >= self.FORWARD_IMAGE_WIDTH or p1[1] >= self.FORWARD_IMAGE_HEIGHT or p1[0] <= 0 or p1[1] <= 0:
       return False
-    if p2[0] >= 640 or p2[1] >= 480 or p2[0] <= 0 or p2[1] <= 0:
+    if p2[0] >= self.FORWARD_IMAGE_WIDTH or p2[1] >= self.FORWARD_IMAGE_HEIGHT or p2[0] <= 0 or p2[1] <= 0:
       return False
     return True
 
@@ -208,12 +208,12 @@ class object_track:
     stability = False
     if prevBBox==():
       return False
-    if (abs(prevBBox[0]-newBBox[0])<20) and (abs(prevBBox[1]-newBBox[1])<20):
+    if (abs(prevBBox[0]-newBBox[0])<20) or (abs(prevBBox[1]-newBBox[1])<20):
       stability = True
-    if (abs(yoloBBox[0]-newBBox[0])<20) and (abs(yoloBBox[1]-newBBox[1])<20):
+    if (abs(yoloBBox[0]-newBBox[0])<10) or (abs(yoloBBox[1]-newBBox[1])<10):
       stability = True
       self.yoloCounter = 0
-    elif self.yoloCounter<4:
+    elif self.yoloCounter<2:
       self.yoloCounter+=1
     else:
       stability = False
@@ -246,7 +246,10 @@ class object_track:
               self.select_camera(0)
               #Publish switch camera message
             else:
-              self.publish_bbox(x,y,(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT - 80),self.litter_detected,False,False)
+              if (abs(x - self.FORWARD_IMAGE_WIDTH/2) < 20):
+                self.publish_bbox(x,y,(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT - 80),self.litter_detected,False,False)
+              else:
+                self.publish_bbox(x,y,(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT/2),self.litter_detected,False,False)
           elif self.current_state == self.DOWNWARD: 
             if self.is_centered(x,y, self.DOWNWARD_IMAGE_WIDTH, self.DOWNWARD_IMAGE_HEIGHT):
               self.publish_bbox(x,y, (self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,True)
