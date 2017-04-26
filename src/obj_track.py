@@ -250,11 +250,12 @@ class object_track:
                 self.publish_bbox(x,y,(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT - 80),self.litter_detected,False,False)
               else:
                 self.publish_bbox(x,y,(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT/2),self.litter_detected,False,False)
-          elif self.current_state == self.DOWNWARD: 
-            if self.is_centered(x,y, self.DOWNWARD_IMAGE_WIDTH, self.DOWNWARD_IMAGE_HEIGHT):
-              self.publish_bbox(x,y, (self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,True)
+          elif self.current_state == self.DOWNWARD:
+            isCentered = self.is_centered(x,y, self.DOWNWARD_IMAGE_WIDTH, self.DOWNWARD_IMAGE_HEIGHT)
+            if (abs(x - self.DOWNWARD_IMAGE_WIDTH/2) < 20):
+              self.publish_bbox(x,y, (self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,isCentered)
             else:
-              self.publish_bbox(x,y,(self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,False)
+              self.publish_bbox(x,y, (self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,isCentered)
               #Publish switch camera message
       else:
         self.tracker_state=False
