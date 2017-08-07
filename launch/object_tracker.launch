@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<launch>
+
+  <node name="object_tracker" pkg="object_tracker" type="obj_track.py">
+  </node>
+
+</launch>

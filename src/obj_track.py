@@ -5,83 +5,265 @@ import sys
 import rospy
 import cv2
 from std_msgs.msg import String
+from std_msgs.msg import Int8
 from sensor_msgs.msg import Image
 from object_tracker.msg import BBox
 from yolo2.msg import ImageDetections
 from yolo2.msg import Detection
 from cv_bridge import CvBridge, CvBridgeError
+import time
 
 
+class object_track:
 
-class image_converter:
+  FORWARD = 1
+  SWITCH_CAMERA = 2
+  DOWNWARD = 3
+  current_state = FORWARD
 
-  init_once = False
+  DOWNWARD_IMAGE_HEIGHT = 360 # 530
+  DOWNWARD_IMAGE_WIDTH = 640
+  FORWARD_IMAGE_HEIGHT = 480
+  FORWARD_IMAGE_WIDTH = 640
+
   bbox = ()
   tracker = cv2.Tracker_create("MIL")
-  count = 0
+  litter_detected = False
+  down_servo = False
+  tracker_state = False
+  timer = time.time()
+  bbox2 = () # testing only
+
   def __init__(self):
     self.image_pub = rospy.Publisher("image_topic_2",Image)
+    self.camera_select_pub = rospy.Publisher("vision/yolo2/camera_select",Int8)
     self.bbox_pub = rospy.Publisher("bbox",BBox)
     self.bridge = CvBridge()
-    self.image_sub = rospy.Subscriber("vision/image_raw",Image,self.image_callback)
+    self.arm_sub = rospy.Subscriber("arm_state", String, self.arm_state_callback)
+    self.image_sub = rospy.Subscriber("vision/yolo2/image_raw",Image,self.image_callback)
     self.roi_sub = rospy.Subscriber("vision/yolo2/detections",ImageDetections,self.detections_callback)
 
+  def select_camera(self,camera):
+    msg = Int8();
+    msg.data = camera;
+    self.camera_select_pub.publish(msg);
+
+  def publish_bbox(self, x, y, x_center, y_center, detection, down_servo, ready_for_pickup):
+    bbox_msg = BBox()
+    bbox_msg.x = x
+    bbox_msg.y = y
+    bbox_msg.x_center = x_center
+    bbox_msg.y_center = y_center
+    bbox_msg.detection = detection
+    bbox_msg.down_servo = down_servo
+    bbox_msg.ready_for_pickup = ready_for_pickup
+    self.bbox_pub.publish(bbox_msg)
+
+  def arm_state_callback(self,msg):
+    if msg.data == "in_progress":
+      self.publish_bbox(self.bbox[0],self.bbox[1],320,240,self.litter_detected,True,True)
+      return
+    elif msg.data == "pickup_done":
+      self.current_state = self.FORWARD
+      self.bbox = ()
+      self.bbox2 =()
+      self.litter_detected = False
+      self.select_camera(1) 
+      self.tracker_state=False
+
+  def handle_forward(self,data):
+    #time.time() - self.timer > 1 and
+    if  data.num_detections > 0:
+      obj = data.detections[0]
+      self.bbox2 = ((obj.x - obj.width/2), (obj.y - obj.height/2), obj.width, obj.height)
+      self.litter_detected = True
+      if self.tracker_state == False:
+        self.bbox = ((obj.x - obj.width/2), (obj.y - obj.height/2), obj.width, obj.height)
+    elif data.num_detections == 0 and self.tracker_state == False:
+      self.litter_detected = False
+
+  def is_can_bottle(self, data):
+    if data.num_detections > 0:
+      class_id = -1
+      confidence = 0
+      for objects in data.detections:
+        class_id = objects.class_id
+        confidence = objects.confidence
+        print ("there are unconfirmed detections")
+        if class_id < 2 and confidence > 0.5:
+          x = objects.x - objects.width/2 
+          y = objects.y - objects.height/2 
+          width = objects.width
+          height = objects.height
+          is_litter = True
+          return (x,y,width,height,is_litter)
+    return (0,0,0,0,False)
+
+  def handle_downward(self,data):
+    print("curent state is down")
+    x,y,width,height,is_litter = self.is_can_bottle(data)    
+    if is_litter:
+      self.bbox2 = (x,y,width,height)
+      self.litter_detected = True 
+      if self.tracker_state == False:
+        self.bbox = (x,y,width,height)
+        print("Reached downward detection lost tracking")
+        return
+    elif self.tracker_state==False:
+      self.litter_detected = False
+      return
+
+  def handle_switch(self,data):
+    self.litter_detected = False
+    self.bbox=()
+    self.bbox2=()
+    self.tracker_state = False
+    x,y,width,height,is_litter = self.is_can_bottle(data)
+    if time.time() - self.timer > 1 and is_litter:
+      self.current_state = self.DOWNWARD
+      self.bbox=(x,y,width,height)
+      self.bbox2=(x,y,width,height)
+      self.litter_detected = True
+
   def detections_callback(self,data):
-    if not self.init_once:
-      if len(data.detections)>0:
-        detected=data.detections[0]
-        self.bbox=(detected.x,detected.y,detected.width/2,detected.height/2)
-      else:
-        self.bbox=()
+    if self.current_state == self.FORWARD:
+      self.handle_forward(data)
+    elif self.current_state == self.SWITCH_CAMERA:
+      self.handle_switch(data)
+    elif self.current_state == self.DOWNWARD:
+      self.handle_downward(data)
+  
+  def draw_rectangle (self, cv_image):
+    if self.bbox:
+      p1 = (int(self.bbox[0]), int(self.bbox[1]))
+      p2 = (int(self.bbox[0] + self.bbox[2]), int(self.bbox[1] + self.bbox[3]))
+      p3 = (int(self.bbox2[0]), int(self.bbox2[1]))
+      p4 = (int(self.bbox2[0] + self.bbox2[2]), int(self.bbox2[1]  + self.bbox2[3]))
+      if self.bboxInBounds(self.bbox) ==False or self.bboxInBounds(self.bbox2) == False:
+        return cv_image
+      cv2.rectangle(cv_image, p1, p2, (0,0,255),4)
+      cv2.rectangle(cv_image, p3, p4, (0,255,0),4)
+    return cv_image    
 
   def image_callback(self,data):
-
-    self.count=self.count+1
-    if(self.count%30==0):
-      self.init_once=False
-      self.count=0
-      return
-    if len(self.bbox)>0:              
-      try:
+    print("bbox"+str(self.bbox))
+    print("Litter detect"+str(self.litter_detected))
+    print("Curr_state"+str(self.current_state))
+    print("tracker_state"+str(self.tracker_state))
+    try:
         cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
         print(cv_image.shape)
-      except CvBridgeError as e:
-        print("hello")
-        print(e)
+    except CvBridgeError as e:
+      print("hello")
+      print(e)
 
-      if not self.init_once:
-        self.tracker=cv2.Tracker_create("MIL")
-        ok = self.tracker.init(cv_image, self.bbox)
-        self.init_once = True
+    if self.current_state == self.SWITCH_CAMERA and time.time() - self.timer<10:
+      self.publish_bbox(0,0,0,0,False,True,False)
+    elif self.current_state == self.SWITCH_CAMERA and time.time() - self.timer>10:
+      self.current_state = self.FORWARD
+      self.select_camera(1)
+      self.bbox = ()
+      self.bbox2 = ()
+      self.tracker_state = False
+      self.litter_detected = False
+    if self.litter_detected:
+      self.track_object(cv_image)
+      cv_image=self.draw_rectangle(cv_image)
+    elif self.current_state!=self.SWITCH_CAMERA:
+      self.tracker_state = False
+      self.publish_bbox(0,0,0,0,self.litter_detected,False,False)
+      if self.current_state == self.DOWNWARD:
+        self.current_state = self.FORWARD
+        self.select_camera(1)
+        self.tracker_state=False
+        #Publish camera switching message
+    cv2.imshow("Image window", cv_image)
+    cv2.waitKey(3)
+    # try:
+    #   self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
+    # except CvBridgeError as e:
+    #   print(e)
 
-      ok, newbox = self.tracker.update(cv_image)
+  def is_centered(self, x, y, width, height):
+    if self.current_state==self.FORWARD:
+      xdiff = x - (width/2)
+      ydiff = y - (height - 80) 
+    elif self.current_state==self.DOWNWARD:
+      xdiff = x - (width/2)
+      ydiff = y - (3*height/4)
+    return (abs(xdiff) < 50 and abs(ydiff) < 50)
 
-      if ok:
-          print(self.bbox)
-          print(newbox)
-          p1 = (int(newbox[0]), int(newbox[1]))
-          p2 = (int(newbox[0] + newbox[2]), int(newbox[1] + newbox[3]))
-          msg_to_send = BBox()
-          msg_to_send.x=int(newbox[0]+(newbox[2]/2))
-          msg_to_send.y=int(newbox[1]+(newbox[3]/2))
-          self.bbox_pub.publish(msg_to_send)
-          cv2.rectangle(cv_image, p1, p2, (0,0,255),6)
+  def bboxInBounds(self,bbox):
+    p1 = (int(bbox[0]), int(bbox[1]))
+    p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
+    if p1[0] >= self.FORWARD_IMAGE_WIDTH or p1[1] >= self.FORWARD_IMAGE_HEIGHT or p1[0] <= 0 or p1[1] <= 0:
+      return False
+    if p2[0] >= self.FORWARD_IMAGE_WIDTH or p2[1] >= self.FORWARD_IMAGE_HEIGHT or p2[0] <= 0 or p2[1] <= 0:
+      return False
+    return True
+
+  yoloCounter = 0
+
+  def isBBoxStable(self,newBBox, prevBBox, yoloBBox):
+    stability = False
+    if prevBBox==():
+      return False
+    if (abs(prevBBox[0]-newBBox[0])<20) or (abs(prevBBox[1]-newBBox[1])<20):
+      stability = True
+    if (abs(yoloBBox[0]-newBBox[0])<10) or (abs(yoloBBox[1]-newBBox[1])<10):
+      stability = True
+      self.yoloCounter = 0
+    elif self.yoloCounter<5:
+      self.yoloCounter+=1
+    else:
+      stability = False
+      self.yoloCounter = 0
+    return stability
+
+  def getBBoxCenter(self, bbox):
+    x = bbox[0]+(bbox[2]/2)
+    y = bbox[1]+(bbox[3]/2)
+    return x,y
+
+  def track_object(self,image_in):
+    if self.bbox!=():
+      if self.tracker_state!=True and self.bboxInBounds(self.bbox) == True:
+        self.tracker = cv2.Tracker_create("MIL")
+        ok = self.tracker.init(image_in, self.bbox)
+        self.tracker_state = True
+      ok, newbox = self.tracker.update(image_in)
+      # bboxX = self.bbox[0]
+      # bboxY = self.bbox[1]
+      # newBboxX = newbox[0]
+      # newBboxY = newbox[1]
+      if ok and self.isBBoxStable(newbox, self.bbox, self.bbox2):
+          self.bbox = newbox
+          x,y=self.getBBoxCenter(self.bbox)
+          if self.current_state == self.FORWARD:
+            if self.is_centered(x,y, self.FORWARD_IMAGE_WIDTH, self.FORWARD_IMAGE_HEIGHT):
+              self.current_state = self.SWITCH_CAMERA
+              self.timer = time.time()
+              self.select_camera(0)
+              #Publish switch camera message
+            else:
+              if (abs(x - self.FORWARD_IMAGE_WIDTH/2) < 20):
+                self.publish_bbox(x,y,(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT - 80),self.litter_detected,False,False)
+              else:
+                self.publish_bbox(x,y,(self.FORWARD_IMAGE_WIDTH/2),(self.FORWARD_IMAGE_HEIGHT/2),self.litter_detected,False,False)
+          elif self.current_state == self.DOWNWARD:
+            isCentered = self.is_centered(x,y, self.DOWNWARD_IMAGE_WIDTH, self.DOWNWARD_IMAGE_HEIGHT)
+            if (abs(x - self.DOWNWARD_IMAGE_WIDTH/2) < 20):
+              self.publish_bbox(x,y, (self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,isCentered)
+            else:
+              self.publish_bbox(x,y, (self.DOWNWARD_IMAGE_WIDTH/2),(3*self.DOWNWARD_IMAGE_HEIGHT/4),self.litter_detected,True,isCentered)
+              #Publish switch camera message
       else:
-        self.init_once=False
-
-      (rows,cols,channels) = cv_image.shape
-
-      cv2.imshow("Image window", cv_image)
-      cv2.waitKey(3)
-
-      try:
-        self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
-      except CvBridgeError as e:
-        print(e)
+        self.tracker_state=False
 
 def main(args):
-  ic = image_converter()
-  rospy.init_node('image_converter', anonymous=True)
+  ic = object_track()
+  rospy.init_node('object_track', anonymous=True)
+  ic.select_camera(1)
   try:
     rospy.spin()
   except KeyboardInterrupt:
