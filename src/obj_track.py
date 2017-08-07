@@ -213,7 +213,7 @@ class object_track:
     if (abs(yoloBBox[0]-newBBox[0])<10) or (abs(yoloBBox[1]-newBBox[1])<10):
       stability = True
       self.yoloCounter = 0
-    elif self.yoloCounter<2:
+    elif self.yoloCounter<5:
       self.yoloCounter+=1
     else:
       stability = False
